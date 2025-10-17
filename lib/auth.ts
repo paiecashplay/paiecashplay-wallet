@@ -18,7 +18,7 @@ export const authOptions: NextAuthOptions = {
       token: {
         url: `${process.env.OAUTH_ISSUER}/api/auth/token`,
         async request({ client, params, checks, provider }) {
-          const response = await fetch(provider.token.url, {
+          const response = await fetch(`${process.env.OAUTH_ISSUER}/api/auth/token`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/x-www-form-urlencoded'
@@ -44,7 +44,7 @@ export const authOptions: NextAuthOptions = {
       userinfo: {
         url: `${process.env.OAUTH_ISSUER}/api/auth/userinfo`,
         async request({ tokens, provider }) {
-          const response = await fetch(provider.userinfo.url, {
+          const response = await fetch(`${process.env.OAUTH_ISSUER}/api/auth/userinfo`, {
             headers: {
               'Authorization': `Bearer ${tokens.access_token}`
             }
@@ -67,8 +67,8 @@ export const authOptions: NextAuthOptions = {
           name: profile.name,
           email: profile.email,
           image: profile.picture,
-          userType: profile.user_type || 'player',
-          metadata: profile.metadata || {}
+          oauthId: profile.sub,
+          userType: profile.user_type || 'player'
         }
       }
     }
@@ -123,7 +123,11 @@ export const authOptions: NextAuthOptions = {
             session.user.id = user.id
             session.user.oauthId = user.oauthId
             session.user.userType = user.userType
-            session.user.wallet = user.wallet
+            session.user.wallet = user.wallet ? {
+              id: user.wallet.id,
+              balance: user.wallet.balance,
+              currency: user.wallet.currency
+            } : undefined
           }
         } catch (error) {
           console.error('Session callback error:', error)
