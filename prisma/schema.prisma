@@ -1,0 +1,122 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id          String   @id @default(cuid())
+  oauthId     String   @unique // ID venant du service OAuth
+  email       String   @unique
+  name        String?
+  picture     String?
+  userType    String   // player|club|federation|donor|company|affiliate
+  metadata    Json?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  wallet      Wallet?
+  transactions Transaction[]
+  payments    Payment[]
+
+  @@map("users")
+}
+
+model Wallet {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  balance   Int      @default(0) // En unités de base
+  currency  String   @default("XAF") // FCFA
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions Transaction[]
+  payments     Payment[]
+
+  @@map("wallets")
+}
+
+model Transaction {
+  id          String            @id @default(cuid())
+  userId      String
+  walletId    String
+  type        TransactionType
+  amount      Int               // En unités de base
+  description String?
+  status      TransactionStatus @default(PENDING)
+  reference   String?           @unique
+  metadata    Json?
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  user   User   @relation(fields: [userId], references: [id])
+  wallet Wallet @relation(fields: [walletId], references: [id])
+
+  @@map("transactions")
+}
+
+model Payment {
+  id              String        @id @default(cuid())
+  userId          String
+  walletId        String
+  amount          Int           // En unités de base
+  currency        String        @default("XAF")
+  description     String?
+  status          PaymentStatus @default(PENDING)
+  paymentMethod   String?       // stripe, mobile_money, bank_transfer
+  externalId      String?       // ID Stripe ou autre
+  reference       String        @unique
+  successUrl      String?
+  cancelUrl       String?
+  webhookUrl      String?
+  metadata        Json?
+  paidAt          DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  user   User   @relation(fields: [userId], references: [id])
+  wallet Wallet @relation(fields: [walletId], references: [id])
+
+  @@map("payments")
+}
+
+model PaymentLink {
+  id          String   @id @default(cuid())
+  reference   String   @unique
+  amount      Int      // En unités de base
+  description String?
+  isActive    Boolean  @default(true)
+  expiresAt   DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("payment_links")
+}
+
+enum TransactionType {
+  DEPOSIT
+  WITHDRAWAL
+  PAYMENT
+  REFUND
+}
+
+enum TransactionStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum PaymentStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  CANCELLED
+  REFUNDED
+}
