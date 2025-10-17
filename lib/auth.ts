@@ -11,7 +11,8 @@ export const authOptions: NextAuthOptions = {
         url: `${process.env.OAUTH_ISSUER}/api/auth/authorize`,
         params: {
           scope: 'openid profile email',
-          response_type: 'code'
+          response_type: 'code',
+          redirect_uri: process.env.OAUTH_REDIRECT_URI
         }
       },
       token: {
@@ -25,7 +26,7 @@ export const authOptions: NextAuthOptions = {
             body: new URLSearchParams({
               grant_type: 'authorization_code',
               code: params.code!,
-              redirect_uri: process.env.OAUTH_REDIRECT_URI!,
+              redirect_uri: `${process.env.NEXTAUTH_URL}/api/auth/callback/paiecashplay`,
               client_id: process.env.OAUTH_CLIENT_ID!,
               client_secret: process.env.OAUTH_CLIENT_SECRET!
             })

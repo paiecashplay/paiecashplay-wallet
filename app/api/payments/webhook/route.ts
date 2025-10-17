@@ -1,66 +1,73 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { stripe } from '@/lib/stripe'
 import { prisma } from '@/lib/prisma'
-import { sendTransactionEmail } from '@/lib/email'
 
 export async function POST(request: NextRequest) {
+  const sig = request.headers.get('stripe-signature')
   const body = await request.text()
-  const signature = request.headers.get('stripe-signature')!
+
+  let event
 
   try {
-    const event = stripe.webhooks.constructEvent(
-      body,
-      signature,
-      process.env.STRIPE_WEBHOOK_SECRET!
-    )
+    event = stripe.webhooks.constructEvent(body, sig!, process.env.STRIPE_WEBHOOK_SECRET!)
+  } catch (err) {
+    console.error('Webhook signature verification failed:', err)
+    return NextResponse.json({ error: 'Invalid signature' }, { status: 400 })
+  }
 
-    if (event.type === 'payment_intent.succeeded') {
-      const paymentIntent = event.data.object
-      const { userId, reference, type } = paymentIntent.metadata
-
+  if (event.type === 'checkout.session.completed') {
+    const session = event.data.object as any
+    
+    try {
+      const { userId, walletId, reference, type, originalAmount } = session.metadata
+      
       if (type === 'deposit') {
         await prisma.$transaction(async (tx) => {
-          const payment = await tx.payment.update({
-            where: { reference },
-            data: { 
-              status: 'COMPLETED',
-              paidAt: new Date()
+          const transaction = await tx.transaction.findFirst({
+            where: {
+              reference,
+              status: 'PENDING',
+              type: 'DEPOSIT'
             }
           })
 
+          if (!transaction) {
+            throw new Error('Transaction non trouvée')
+          }
+
+          // Utiliser le montant original en FCFA
+          const amountToAdd = originalAmount ? parseInt(originalAmount) : transaction.amount
+
           await tx.wallet.update({
-            where: { userId },
-            data: { balance: { increment: payment.amount } }
+            where: { id: walletId },
+            data: {
+              balance: {
+                increment: amountToAdd
+              }
+            }
           })
 
-          await tx.transaction.create({
+          await tx.transaction.update({
+            where: { id: transaction.id },
             data: {
-              userId,
-              walletId: payment.walletId,
-              type: 'DEPOSIT',
-              amount: payment.amount,
-              description: 'Dépôt wallet',
               status: 'COMPLETED',
-              reference
+              metadata: {
+                ...transaction.metadata as any,
+                stripeSessionId: session.id,
+                stripeAmountPaid: session.amount_total,
+                completedAt: new Date().toISOString()
+              }
             }
           })
         })
 
-        const user = await prisma.user.findUnique({ where: { id: userId } })
-        if (user?.email) {
-          await sendTransactionEmail(
-            user.email,
-            'deposit',
-            paymentIntent.amount / 100,
-            reference
-          )
-        }
+        console.log(`Dépôt complété: ${reference} - ${originalAmount || 'N/A'} FCFA (Stripe: ${session.amount_total} centimes EUR)`)
       }
+    } catch (error) {
+      console.error('Erreur lors du traitement du webhook:', error)
+      return NextResponse.json({ error: 'Erreur de traitement' }, { status: 500 })
     }
-
-    return NextResponse.json({ received: true })
-  } catch (error) {
-    console.error('Webhook error:', error)
-    return NextResponse.json({ error: 'Webhook error' }, { status: 400 })
   }
+
+  return NextResponse.json({ received: true, processed: event.type })
 }

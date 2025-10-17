@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { X, CreditCard, Smartphone, Building, Loader } from 'lucide-react'
+import { X, CreditCard, Smartphone, Wallet, Loader } from 'lucide-react'
 
 interface DepositModalProps {
   isOpen: boolean
@@ -11,64 +11,97 @@ interface DepositModalProps {
 
 export default function DepositModal({ isOpen, onClose, onSuccess }: DepositModalProps) {
   const [amount, setAmount] = useState('')
-  const [selectedMethod, setSelectedMethod] = useState('stripe')
+  const [aggregator, setAggregator] = useState('')
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
 
-  const paymentMethods = [
-    {
-      id: 'stripe',
-      name: 'Carte bancaire',
-      description: 'Visa, Mastercard, American Express',
-      icon: CreditCard,
-      fees: '2.9% + 30 FCFA',
+  const paymentAggregators = [
+    { 
+      id: 'stripe', 
+      name: 'Stripe', 
+      icon: CreditCard, 
+      fee: '2.9% + 30 FCFA',
+      methods: ['Carte Visa/Mastercard', 'Apple Pay', 'Google Pay'],
       color: 'blue'
     },
-    {
-      id: 'mobile_money',
-      name: 'Mobile Money',
-      description: 'Orange Money, MTN Money',
-      icon: Smartphone,
-      fees: '1.5%',
+    { 
+      id: 'paypal', 
+      name: 'PayPal', 
+      icon: Wallet, 
+      fee: '3.4% + 35 FCFA',
+      methods: ['Compte PayPal', 'Carte via PayPal'],
+      color: 'indigo'
+    },
+    { 
+      id: 'orange_money', 
+      name: 'Orange Money', 
+      icon: Smartphone, 
+      fee: '1.5%',
+      methods: ['Orange Money Sénégal', 'Orange Money Mali'],
       color: 'orange'
     },
-    {
-      id: 'bank_transfer',
-      name: 'Virement bancaire',
-      description: 'Virement SEPA, Swift',
-      icon: Building,
-      fees: 'Gratuit',
+    { 
+      id: 'wave', 
+      name: 'Wave', 
+      icon: Smartphone, 
+      fee: '1%',
+      methods: ['Wave Sénégal', 'Wave Côte d\'Ivoire'],
       color: 'green'
     }
   ]
 
-  const handleDeposit = async () => {
-    if (!amount || parseFloat(amount) <= 0) return
+  const calculateFee = (amount: number, aggregatorId: string) => {
+    switch (aggregatorId) {
+      case 'stripe':
+        return Math.round(amount * 0.029 + 30)
+      case 'paypal':
+        return Math.round(amount * 0.034 + 35)
+      case 'orange_money':
+        return Math.round(amount * 0.015)
+      case 'wave':
+        return Math.round(amount * 0.01)
+      default:
+        return 0
+    }
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!amount || !aggregator) return
 
     setLoading(true)
+    setError('')
+
     try {
       const response = await fetch('/api/wallet/deposit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           amount: parseFloat(amount),
-          method: selectedMethod
+          aggregator,
+          fee: calculateFee(parseFloat(amount), aggregator)
         })
       })
 
       const data = await response.json()
 
-      if (selectedMethod === 'stripe' && data.clientSecret) {
-        // Rediriger vers Stripe Checkout ou utiliser Stripe Elements
-        window.location.href = data.checkoutUrl || '#'
-      } else if (selectedMethod === 'mobile_money' && data.paymentUrl) {
-        // Rediriger vers l'interface Mobile Money
+      if (!response.ok) {
+        throw new Error(data.error || 'Erreur lors du dépôt')
+      }
+
+      // Redirection vers l'agrégateur de paiement
+      if (data.paymentUrl) {
+        // Rediriger vers Stripe dans la même fenêtre
         window.location.href = data.paymentUrl
       } else {
-        // Pour les virements bancaires, afficher les instructions
         onSuccess()
+        onClose()
+        setAmount('')
+        setAggregator('')
       }
-    } catch (error) {
-      console.error('Deposit error:', error)
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Une erreur est survenue'
+      setError(errorMessage)
     } finally {
       setLoading(false)
     }
@@ -77,124 +110,164 @@ export default function DepositModal({ isOpen, onClose, onSuccess }: DepositModa
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-2xl p-6 w-full max-w-md mx-4">
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-xl font-bold text-gray-900">Effectuer un dépôt</h2>
-          <button
-            onClick={onClose}
-            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-          >
-            <X className="h-5 w-5" />
-          </button>
-        </div>
-
-        <div className="space-y-6">
-          {/* Montant */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Montant à déposer
-            </label>
-            <div className="relative">
-              <input
-                type="number"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 text-lg"
-                placeholder="0"
-                min="100"
-              />
-              <span className="absolute right-3 top-3 text-gray-500">FCFA</span>
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-6xl transform transition-all duration-300 scale-100">
+        {/* Header avec gradient */}
+        <div className="bg-gradient-to-r from-green-500 to-emerald-600 rounded-t-3xl p-6 text-white">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-2xl font-bold">Effectuer un dépôt</h2>
+              <p className="text-green-100 text-sm mt-1">Choisissez votre méthode de paiement préférée</p>
             </div>
-            <p className="text-xs text-gray-500 mt-1">Montant minimum: 100 FCFA</p>
+            <button
+              onClick={onClose}
+              className="p-2 hover:bg-white/20 rounded-full transition-colors"
+            >
+              <X className="h-6 w-6" />
+            </button>
           </div>
+        </div>
+        
+        <div className="p-6">
 
-          {/* Méthodes de paiement */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-3">
-              Méthode de paiement
-            </label>
-            <div className="space-y-3">
-              {paymentMethods.map((method) => {
-                const Icon = method.icon
-                return (
-                  <div
-                    key={method.id}
-                    onClick={() => setSelectedMethod(method.id)}
-                    className={`p-4 border-2 rounded-lg cursor-pointer transition-all ${
-                      selectedMethod === method.id
-                        ? 'border-green-500 bg-green-50'
-                        : 'border-gray-200 hover:border-gray-300'
-                    }`}
-                  >
-                    <div className="flex items-center space-x-3">
-                      <div className={`p-2 rounded-lg ${
-                        method.color === 'blue' ? 'bg-blue-100' :
-                        method.color === 'orange' ? 'bg-orange-100' :
-                        'bg-green-100'
-                      }`}>
-                        <Icon className={`h-5 w-5 ${
-                          method.color === 'blue' ? 'text-blue-600' :
-                          method.color === 'orange' ? 'text-orange-600' :
-                          'text-green-600'
-                        }`} />
-                      </div>
-                      <div className="flex-1">
-                        <h3 className="font-medium text-gray-900">{method.name}</h3>
-                        <p className="text-sm text-gray-500">{method.description}</p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-sm font-medium text-gray-900">Frais: {method.fees}</p>
+        <form onSubmit={handleSubmit}>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            {/* Colonne gauche - Saisie et sélection */}
+            <div className="space-y-6">
+              <div>
+                <label className="block text-sm font-semibold text-gray-800 mb-3">
+                  💰 Montant à déposer
+                </label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    value={amount}
+                    onChange={(e) => setAmount(e.target.value)}
+                    className="w-full px-6 py-4 text-lg font-medium border-2 border-gray-200 rounded-2xl focus:ring-4 focus:ring-green-500/20 focus:border-green-500 transition-all duration-200 bg-gray-50 focus:bg-white"
+                    placeholder="0"
+                    min="100"
+                    required
+                  />
+                  <span className="absolute right-6 top-4 text-gray-500 font-medium text-lg">FCFA</span>
+                </div>
+                <p className="text-xs text-gray-500 mt-2">💡 Montant minimum: 100 FCFA</p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-800 mb-4">
+                  🏦 Méthodes de paiement
+                </label>
+                <div className="grid grid-cols-2 gap-3">
+                  {paymentAggregators.map((agg) => {
+                    const Icon = agg.icon
+                    const isSelected = aggregator === agg.id
+                    return (
+                      <button
+                        key={agg.id}
+                        type="button"
+                        onClick={() => setAggregator(agg.id)}
+                        className={`group relative p-4 border-2 rounded-xl text-left transition-all duration-200 transform hover:scale-[1.02] ${
+                          isSelected
+                            ? 'border-green-500 bg-gradient-to-br from-green-50 to-emerald-50 shadow-lg'
+                            : 'border-gray-200 hover:border-gray-300 hover:shadow-md bg-white'
+                        }`}
+                      >
+                        <div className="flex flex-col items-center text-center space-y-2">
+                          <div className={`p-3 rounded-xl ${
+                            agg.color === 'blue' ? 'bg-blue-100' :
+                            agg.color === 'indigo' ? 'bg-indigo-100' :
+                            agg.color === 'orange' ? 'bg-orange-100' :
+                            'bg-green-100'
+                          }`}>
+                            <Icon className={`w-6 h-6 ${
+                              agg.color === 'blue' ? 'text-blue-600' :
+                              agg.color === 'indigo' ? 'text-indigo-600' :
+                              agg.color === 'orange' ? 'text-orange-600' :
+                              'text-green-600'
+                            }`} />
+                          </div>
+                          <div>
+                            <div className="font-semibold text-gray-900 text-sm">{agg.name}</div>
+                            <div className="text-xs text-gray-600">Frais: {agg.fee}</div>
+                          </div>
+                          <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${
+                            isSelected 
+                              ? 'border-green-500 bg-green-500' 
+                              : 'border-gray-300 group-hover:border-gray-400'
+                          }`}>
+                            {isSelected && <div className="w-1.5 h-1.5 bg-white rounded-full" />}
+                          </div>
+                        </div>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            </div>
+            
+            {/* Colonne droite - Résumé et validation */}
+            <div className="space-y-6">
+              <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-2xl p-6 border-2 border-green-200 h-fit">
+                <h4 className="font-bold text-green-800 mb-4 flex items-center text-lg">
+                  📊 Résumé de votre dépôt
+                </h4>
+                {amount && aggregator ? (
+                  <div className="space-y-4">
+                    <div className="flex justify-between items-center">
+                      <span className="text-green-700">Montant</span>
+                      <span className="font-bold text-green-900">{parseFloat(amount).toLocaleString()} FCFA</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-green-700">Frais {paymentAggregators.find(a => a.id === aggregator)?.name}</span>
+                      <span className="font-bold text-orange-600">+{calculateFee(parseFloat(amount), aggregator).toLocaleString()} FCFA</span>
+                    </div>
+                    <div className="border-t-2 border-green-300 pt-4">
+                      <div className="flex justify-between items-center">
+                        <span className="font-bold text-green-900">Total à payer</span>
+                        <span className="font-bold text-2xl text-green-600">
+                          {(parseFloat(amount) + calculateFee(parseFloat(amount), aggregator)).toLocaleString()} FCFA
+                        </span>
                       </div>
                     </div>
                   </div>
-                )
-              })}
+                ) : (
+                  <div className="text-center py-8">
+                    <div className="text-6xl mb-4">💳</div>
+                    <p className="text-green-700 font-medium">Sélectionnez un montant et une méthode</p>
+                    <p className="text-green-600 text-sm mt-2">Le résumé apparaîtra ici</p>
+                  </div>
+                )}
+              </div>
+
+              {error && (
+                <div className="p-4 bg-red-50 border-l-4 border-red-400 rounded-r-xl">
+                  <div className="flex items-center">
+                    <div className="text-red-400 mr-3">⚠️</div>
+                    <p className="text-sm font-medium text-red-700">{error}</p>
+                  </div>
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={!amount || !aggregator || loading}
+                className="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white py-4 px-6 rounded-2xl font-semibold text-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-3 transition-all duration-200 transform hover:scale-[1.02] shadow-lg hover:shadow-xl"
+              >
+                {loading ? (
+                  <>
+                    <Loader className="w-5 h-5 animate-spin" />
+                    <span>Traitement en cours...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>💳</span>
+                    <span>Payer avec {aggregator ? paymentAggregators.find(a => a.id === aggregator)?.name : 'l\'agrégateur'}</span>
+                  </>
+                )}
+              </button>
             </div>
           </div>
-
-          {/* Résumé */}
-          {amount && (
-            <div className="bg-gray-50 rounded-lg p-4">
-              <div className="flex justify-between items-center mb-2">
-                <span className="text-sm text-gray-600">Montant</span>
-                <span className="font-medium">{amount} FCFA</span>
-              </div>
-              <div className="flex justify-between items-center mb-2">
-                <span className="text-sm text-gray-600">Frais</span>
-                <span className="font-medium">
-                  {selectedMethod === 'stripe' ? Math.ceil(parseFloat(amount) * 0.029 + 30) :
-                   selectedMethod === 'mobile_money' ? Math.ceil(parseFloat(amount) * 0.015) :
-                   0} FCFA
-                </span>
-              </div>
-              <hr className="my-2" />
-              <div className="flex justify-between items-center">
-                <span className="font-medium">Total à payer</span>
-                <span className="font-bold text-lg">
-                  {selectedMethod === 'stripe' ? parseFloat(amount) + Math.ceil(parseFloat(amount) * 0.029 + 30) :
-                   selectedMethod === 'mobile_money' ? parseFloat(amount) + Math.ceil(parseFloat(amount) * 0.015) :
-                   parseFloat(amount)} FCFA
-                </span>
-              </div>
-            </div>
-          )}
-
-          {/* Bouton de confirmation */}
-          <button
-            onClick={handleDeposit}
-            disabled={!amount || parseFloat(amount) < 100 || loading}
-            className="w-full bg-green-600 hover:bg-green-700 disabled:bg-gray-300 text-white py-3 px-4 rounded-lg font-medium transition-colors flex items-center justify-center space-x-2"
-          >
-            {loading ? (
-              <>
-                <Loader className="h-4 w-4 animate-spin" />
-                <span>Traitement...</span>
-              </>
-            ) : (
-              <span>Continuer le paiement</span>
-            )}
-          </button>
+        </form>
         </div>
       </div>
     </div>

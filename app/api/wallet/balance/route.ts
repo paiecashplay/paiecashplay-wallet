@@ -1,16 +1,15 @@
 import { NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
+import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
 
 export async function GET() {
-  const session = await getServerSession(authOptions)
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+  const session = await getSession()
+  if (!session?.id) {
+    return NextResponse.json({ error: 'Non autorisé - Veuillez vous connecter' }, { status: 401 })
   }
 
   const wallet = await prisma.wallet.findUnique({
-    where: { userId: session.user.id }
+    where: { userId: session.id }
   })
 
   return NextResponse.json({ 

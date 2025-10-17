@@ -1,5 +1,6 @@
 import './globals.css'
 import { Providers } from './providers'
+import { ToastProvider } from '@/contexts/ToastContext'
 
 export const metadata = {
   title: 'PaieCashPlay Wallet',
@@ -14,7 +15,9 @@ export default function RootLayout({
   return (
     <html lang="fr">
       <body className="font-sans">
-        <Providers>{children}</Providers>
+        <ToastProvider>
+          <Providers>{children}</Providers>
+        </ToastProvider>
       </body>
     </html>
   )

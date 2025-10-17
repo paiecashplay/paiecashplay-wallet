@@ -1,14 +1,44 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { ArrowUpRight, ArrowDownLeft, CreditCard, LogOut, TrendingUp, TrendingDown, Eye, EyeOff, Plus, Minus, BarChart3, PieChart, Calendar, Filter } from 'lucide-react'
 import { LineChart, Line, AreaChart, Area, BarChart, Bar, PieChart as RechartsPieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts'
 import Logo from './Logo'
+import DepositModal from './DepositModal'
+import WithdrawModal from './WithdrawModal'
+import { useToastContext } from '@/contexts/ToastContext'
 
 export default function DashboardClient({ user, wallet, transactions, payments }: any) {
   const [activeTab, setActiveTab] = useState('overview')
   const [showBalance, setShowBalance] = useState(true)
   const [timeRange, setTimeRange] = useState('7d')
+  const [showDepositModal, setShowDepositModal] = useState(false)
+  const [showWithdrawModal, setShowWithdrawModal] = useState(false)
+
+  const toast = useToastContext()
+
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search)
+    const depositStatus = urlParams.get('deposit')
+    const authStatus = urlParams.get('auth')
+    const sessionId = urlParams.get('session_id')
+    
+    if (authStatus === 'success') {
+      toast.success('Connexion réussie !', `Bienvenue ${user.name || user.email}`)
+      window.history.replaceState({}, '', '/dashboard')
+    } else if (depositStatus === 'success' && sessionId) {
+      toast.success('Dépôt réussi !', 'Votre paiement a été traité avec succès')
+      window.history.replaceState({}, '', '/dashboard')
+    } else if (depositStatus === 'cancelled') {
+      toast.warning('Paiement annulé', 'Votre paiement a été annulé')
+      window.history.replaceState({}, '', '/dashboard')
+    }
+  }, [])
+
+  const handleTransactionSuccess = () => {
+    toast.success('Opération réussie !', 'Votre transaction a été traitée avec succès')
+    setTimeout(() => window.location.reload(), 1000)
+  }
 
   const formatAmount = (amount: number) => {
     return new Intl.NumberFormat('fr-FR', {
@@ -94,11 +124,17 @@ export default function DashboardClient({ user, wallet, transactions, payments }
                   <p className="text-green-100 text-sm mt-1">+2.5% ce mois</p>
                 </div>
                 <div className="flex space-x-2">
-                  <button className="bg-white bg-opacity-20 hover:bg-opacity-30 px-4 py-2 rounded-lg flex items-center space-x-2 transition-all">
+                  <button 
+                    onClick={() => setShowDepositModal(true)}
+                    className="bg-white bg-opacity-20 hover:bg-opacity-30 px-4 py-2 rounded-lg flex items-center space-x-2 transition-all"
+                  >
                     <Plus className="h-4 w-4" />
                     <span className="text-sm">Déposer</span>
                   </button>
-                  <button className="bg-white bg-opacity-20 hover:bg-opacity-30 px-4 py-2 rounded-lg flex items-center space-x-2 transition-all">
+                  <button 
+                    onClick={() => setShowWithdrawModal(true)}
+                    className="bg-white bg-opacity-20 hover:bg-opacity-30 px-4 py-2 rounded-lg flex items-center space-x-2 transition-all"
+                  >
                     <Minus className="h-4 w-4" />
                     <span className="text-sm">Retirer</span>
                   </button>
@@ -415,6 +451,7 @@ export default function DashboardClient({ user, wallet, transactions, payments }
 
               {activeTab === 'operations' && (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* Dépôt */}
                   <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-xl p-6 border border-green-200">
                     <div className="flex items-center space-x-3 mb-4">
                       <div className="p-3 bg-green-500 rounded-lg">
@@ -422,23 +459,17 @@ export default function DashboardClient({ user, wallet, transactions, payments }
                       </div>
                       <h3 className="text-lg font-semibold text-green-800">Effectuer un dépôt</h3>
                     </div>
-                    <div className="space-y-4">
-                      <div>
-                        <label className="block text-sm font-medium text-green-700 mb-2">
-                          Montant (FCFA)
-                        </label>
-                        <input
-                          type="number"
-                          className="w-full px-4 py-3 border border-green-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
-                          placeholder="Entrez le montant"
-                        />
-                      </div>
-                      <button className="w-full bg-green-600 hover:bg-green-700 text-white py-3 px-4 rounded-lg font-medium transition-colors">
-                        Déposer maintenant
-                      </button>
-                    </div>
+                    <p className="text-green-700 mb-4">Ajoutez des fonds à votre wallet via différents agrégateurs de paiement</p>
+                    <button 
+                      onClick={() => setShowDepositModal(true)}
+                      className="w-full bg-green-600 hover:bg-green-700 text-white py-3 px-4 rounded-lg font-medium transition-colors flex items-center justify-center space-x-2"
+                    >
+                      <Plus className="h-4 w-4" />
+                      <span>Déposer maintenant</span>
+                    </button>
                   </div>
 
+                  {/* Retrait */}
                   <div className="bg-gradient-to-br from-red-50 to-red-100 rounded-xl p-6 border border-red-200">
                     <div className="flex items-center space-x-3 mb-4">
                       <div className="p-3 bg-red-500 rounded-lg">
@@ -446,25 +477,17 @@ export default function DashboardClient({ user, wallet, transactions, payments }
                       </div>
                       <h3 className="text-lg font-semibold text-red-800">Effectuer un retrait</h3>
                     </div>
-                    <div className="space-y-4">
-                      <div>
-                        <label className="block text-sm font-medium text-red-700 mb-2">
-                          Montant (FCFA)
-                        </label>
-                        <input
-                          type="number"
-                          className="w-full px-4 py-3 border border-red-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
-                          placeholder="Entrez le montant"
-                          max={wallet?.balance || 0}
-                        />
-                      </div>
-                      <p className="text-sm text-red-600">
-                        Solde disponible: {formatAmount(wallet?.balance || 0)}
-                      </p>
-                      <button className="w-full bg-red-600 hover:bg-red-700 text-white py-3 px-4 rounded-lg font-medium transition-colors">
-                        Retirer maintenant
-                      </button>
-                    </div>
+                    <p className="text-red-700 mb-2">Retirez vos fonds vers votre compte bancaire ou mobile money</p>
+                    <p className="text-sm text-red-600 mb-4">
+                      Solde disponible: {formatAmount(wallet?.balance || 0)}
+                    </p>
+                    <button 
+                      onClick={() => setShowWithdrawModal(true)}
+                      className="w-full bg-red-600 hover:bg-red-700 text-white py-3 px-4 rounded-lg font-medium transition-colors flex items-center justify-center space-x-2"
+                    >
+                      <Minus className="h-4 w-4" />
+                      <span>Retirer maintenant</span>
+                    </button>
                   </div>
                 </div>
               )}
@@ -472,6 +495,20 @@ export default function DashboardClient({ user, wallet, transactions, payments }
           </div>
         </div>
       </div>
+
+      {/* Modals */}
+      <DepositModal 
+        isOpen={showDepositModal}
+        onClose={() => setShowDepositModal(false)}
+        onSuccess={handleTransactionSuccess}
+      />
+      
+      <WithdrawModal 
+        isOpen={showWithdrawModal}
+        onClose={() => setShowWithdrawModal(false)}
+        onSuccess={handleTransactionSuccess}
+        availableBalance={wallet?.balance || 0}
+      />
     </div>
   )
 }

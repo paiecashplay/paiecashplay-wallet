@@ -10,7 +10,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Non autorisé - Veuillez vous connecter' }, { status: 401 })
   }
 
-  const { amount, method } = await request.json()
+  const { amount } = await request.json()
   
   if (!amount || amount <= 0) {
     return NextResponse.json({ error: 'Montant invalide' }, { status: 400 })
@@ -21,50 +21,38 @@ export async function POST(request: NextRequest) {
       where: { userId: session.user.id }
     })
 
-    if (!wallet) {
-      return NextResponse.json({ error: 'Wallet non trouvé' }, { status: 404 })
-    }
-
-    if (wallet.balance < amount) {
+    if (!wallet || wallet.balance < amount) {
       return NextResponse.json({ error: 'Solde insuffisant' }, { status: 400 })
     }
 
     const reference = uuidv4()
 
-    const transaction = await prisma.transaction.create({
-      data: {
-        userId: session.user.id,
-        walletId: wallet.id,
-        type: 'WITHDRAWAL',
-        amount: -amount,
-        description: `Retrait ${method} - ${reference}`,
-        status: 'PENDING',
-        reference,
-        metadata: { method }
-      }
-    })
-
-    const result = await prisma.$transaction(async (tx) => {
-      const updatedWallet = await tx.wallet.update({
+    await prisma.$transaction(async (tx) => {
+      await tx.wallet.update({
         where: { id: wallet.id },
         data: { balance: wallet.balance - amount }
       })
 
-      const updatedTransaction = await tx.transaction.update({
-        where: { id: transaction.id },
-        data: { status: 'COMPLETED' }
+      await tx.transaction.create({
+        data: {
+          userId: session.user.id,
+          walletId: wallet.id,
+          type: 'WITHDRAWAL',
+          amount: -amount,
+          description: `Retrait Stripe - ${reference}`,
+          status: 'COMPLETED',
+          reference,
+          metadata: { method: 'card' }
+        }
       })
-
-      return { wallet: updatedWallet, transaction: updatedTransaction }
     })
 
     return NextResponse.json({
       message: 'Retrait effectué avec succès',
-      reference,
-      ...result
+      reference
     })
   } catch (error) {
-    console.error('Withdrawal error:', error)
+    console.error('Stripe refund error:', error)
     return NextResponse.json({ error: 'Erreur lors du retrait' }, { status: 500 })
   }
 }
